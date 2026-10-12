@@ -13,6 +13,7 @@ const ENEMY = {
   beetle: { w: 38, h: 32, speed: 62, stomp: true },
   hopper: { w: 36, h: 34, speed: 0, stomp: true },
   burr: { w: 38, h: 38, speed: 48, stomp: false },
+  ghost: { w: 34, h: 34, speed: 0, stomp: false },
 };
 const STOMP_SCORE = [100, 200, 400, 800, 1000, 2000, 4000, 8000];
 
@@ -48,7 +49,9 @@ export class World {
     this.poleX = level.flag * TILE + TILE / 2;
     this.doorX = (level.flag + 5) * TILE;
     this.flag = { slideY: 2 * TILE + 24, got: false, pts: 0 };
-    this.cam = Math.max(0, Math.min(this.cols * TILE - VW, this.p.x - VW * 0.35));
+    this.shake = 0; this.waves = [];
+    this.boss = level.arena ? this.makeBoss(level.bossC) : null;
+    this.cam = level.arena ? Math.max(0, (this.cols * TILE - VW) / 2) : Math.max(0, Math.min(this.cols * TILE - VW, this.p.x - VW * 0.35));
   }
 
   ev(type, data) { this.events.push({ type, ...data }); }
@@ -57,9 +60,9 @@ export class World {
     const d = ENEMY[e.type];
     return {
       type: e.type, w: d.w, h: d.h, speed: d.speed,
-      x: e.c * TILE + (TILE - d.w) / 2, y: (e.r + 1) * TILE - d.h,
+      x: e.c * TILE + (TILE - d.w) / 2, y: e.type === 'ghost' ? e.r * TILE + (TILE - d.h) / 2 : (e.r + 1) * TILE - d.h,
       vx: 0, vy: 0, dir: -1, state: 'walk', t: 0, onGround: false,
-      hopT: 0.3 + Math.random() * 0.9, rot: 0, anim: Math.random() * 6,
+      hopT: 0.3 + Math.random() * 0.9, rot: 0, anim: Math.random() * 6, shy: false, bob: Math.random() * 6,
     };
   }
 
@@ -171,7 +174,7 @@ export class World {
   bumpEnemies(c, r) {
     const top = r * TILE, l = c * TILE, rgt = l + TILE;
     for (const e of this.enemies) {
-      if (e.state !== 'walk') continue;
+      if (e.state !== 'walk' || e.type === 'ghost') continue;
       if (Math.abs(e.y + e.h - top) < 8 && e.x + e.w > l && e.x < rgt) this.flipEnemy(e);
     }
   }
@@ -219,7 +222,7 @@ export class World {
     const p = this.p;
     p.prevBottom = p.y + p.h;
 
-    if (p.state === 'play') {
+    if (p.state === 'play' && !(this.boss && this.boss.state === 'dead')) {
       this.time -= dt;
       if (this.time <= 0) { this.time = 0; this.kill('time'); }
     }
@@ -233,6 +236,9 @@ export class World {
 
     if (p.state === 'play' || p.state === 'walk') this.updateEnemies(dt); else this.updateEnemies(dt, true);
     this.updateItems(dt);
+    this.updateBoss(dt);
+    this.updateWaves(dt);
+    this.shake = Math.max(0, this.shake - dt * 2.4);
     this.updateMisc(dt);
     this.updateCamera(dt);
   }
@@ -311,6 +317,17 @@ export class World {
       }
     }
 
+    // boss + shockwaves
+    const bs = this.boss;
+    if (bs && bs.state !== 'dead' && bs.hurt <= 0 && overlap(p, bs)) {
+      const above = p.vy > 40 && p.y + p.h < bs.y + 46;
+      if (above) this.hitBoss();
+      else if (p.invuln <= 0) { if (p.big) this.shrink(); else this.kill('enemy'); if (p.state !== 'play') return; }
+    }
+    for (const wv of this.waves) {
+      if (p.invuln <= 0 && overlap(p, wv)) { if (p.big) this.shrink(); else this.kill('enemy'); if (p.state !== 'play') return; break; }
+    }
+
     // coins
     for (const c of this.pickups) {
       if (c.got) continue;
@@ -331,7 +348,7 @@ export class World {
 
     // flag pole
     const poleBox = { x: this.poleX - 10, y: 2 * TILE, w: 20, h: 8 * TILE };
-    if (overlap(p, poleBox)) this.startFlag();
+    if (!this.level.arena && overlap(p, poleBox)) this.startFlag();
   }
 
   startFlag() {
@@ -396,6 +413,7 @@ export class World {
       if (e.state === 'squash') { e.t -= dt; if (e.t <= 0) this.enemies.splice(i, 1); continue; }
       if (freeze) continue;
       if (e.x + e.w < this.cam - 220 || e.x > this.cam + VW + 220) continue;
+      if (e.type === 'ghost') { this.updateGhost(e, dt); continue; }
       e.anim += dt * 8;
       e.vy = Math.min(e.vy + G * dt, 900);
 
@@ -460,11 +478,118 @@ export class World {
 
   updateCamera(dt) {
     const p = this.p;
+    if (this.level.arena) return;
     if (p.state === 'dying' && p.y > VH) return;
     const look = Math.max(-60, Math.min(110, p.vx * 0.22));
     const target = p.x + p.w / 2 - VW * 0.42 + look;
     this.cam += (target - this.cam) * (1 - Math.exp(-dt * 7));
     this.cam = Math.max(0, Math.min(this.cols * TILE - VW, this.cam));
+  }
+
+  // ───────────── night ghost: freezes (shy) while the hero faces it, creeps closer when the hero looks away ─────────────
+  updateGhost(e, dt) {
+    const p = this.p, pc = p.x + p.w / 2, ec = e.x + e.w / 2;
+    const dir = pc > ec ? 1 : -1;
+    e.dir = dir; e.bob += dt * 2.2; e.anim += dt;
+    e.shy = p.state === 'play' && p.face === -dir; // hero faces the ghost
+    if (!e.shy && p.state === 'play' && Math.abs(pc - ec) < 640) {
+      const tx = pc - e.w / 2, ty = Math.max(110, Math.min(330, p.y + p.h / 2 - e.h / 2 - 24));
+      const dx = tx - e.x, dy = ty - e.y, d = Math.hypot(dx, dy) || 1;
+      e.x += (dx / d) * 95 * dt; e.y += (dy / d) * 70 * dt;
+    }
+  }
+
+  // ───────────── Big Frog boss ─────────────
+  makeBoss(c) {
+    const w = 130, h = 96;
+    return { x: c * TILE, y: 10 * TILE - h, w, h, vx: 0, vy: 0, hp: 3, max: 3, state: 'idle', t: 1.6, face: -1, hurt: 0, anim: 0, squash: 0, combo: 0, rot: 0, pend: 0 };
+  }
+
+  updateBoss(dt) {
+    const b = this.boss, p = this.p;
+    if (!b) return;
+    b.anim += dt;
+    if (b.state === 'dead') {
+      b.t -= dt; b.vy += G * 0.55 * dt; b.y += b.vy * dt; b.rot += dt * 7;
+      if (b.t <= 0 && p.state === 'play') { p.state = 'done'; p.vx = 0; this.ev('complete', { bonus: Math.ceil(this.time) * 10, timeLeft: Math.ceil(this.time) }); }
+      return;
+    }
+    if (p.state !== 'play') return;
+    b.hurt = Math.max(0, b.hurt - dt); b.squash *= Math.exp(-dt * 9);
+    const phase = 4 - b.hp, ground = 10 * TILE;
+    if (b.pend > 0) { b.pend -= dt; if (b.pend <= 0) this.spawnWaves(phase); }
+    const pc = p.x + p.w / 2, bc = b.x + b.w / 2;
+    if (b.state !== 'air') b.face = pc < bc ? -1 : 1;
+    switch (b.state) {
+      case 'idle':
+        b.t -= dt;
+        if (b.t <= 0) { b.state = 'crouch'; b.t = [0.75, 0.55, 0.4][phase - 1]; this.ev('croak'); }
+        break;
+      case 'crouch':
+        b.t -= dt; b.squash = 0.22;
+        if (b.t <= 0) {
+          const tx = Math.max(20, Math.min(this.cols * TILE - b.w - 20, pc - b.w / 2));
+          b.vy = -1000; b.vx = Math.max(-560, Math.min(560, (tx - b.x) / (2000 / G))); b.state = 'air'; this.ev('bossjump');
+        }
+        break;
+      case 'air':
+        b.vy += G * dt; b.x += b.vx * dt; b.y += b.vy * dt;
+        b.x = Math.max(8, Math.min(this.cols * TILE - b.w - 8, b.x));
+        if (b.vy > 0 && b.y + b.h >= ground) { b.y = ground - b.h; b.vx = 0; b.vy = 0; this.landBoss(phase); }
+        break;
+      case 'land':
+        b.t -= dt;
+        if (b.t <= 0) {
+          if (b.combo > 0) { b.combo--; b.state = 'crouch'; b.t = 0.28; }
+          else { b.state = 'idle'; b.t = [1.1, 0.8, 0.5][phase - 1]; }
+        }
+        break;
+      case 'stunned':
+        b.vy += G * dt; b.y = Math.min(ground - b.h, b.y + b.vy * dt); if (b.y >= ground - b.h) b.vy = 0;
+        b.t -= dt;
+        if (b.t <= 0) { b.state = 'idle'; b.t = 0.7; }
+        break;
+    }
+  }
+
+  spawnWaves(phase) {
+    const b = this.boss, sp = [230, 270, 310][phase - 1], y = 10 * TILE - 26;
+    this.waves.push({ x: b.x - 26, y, w: 30, h: 26, vx: -sp }, { x: b.x + b.w - 4, y, w: 30, h: 26, vx: sp });
+  }
+
+  landBoss(phase) {
+    const b = this.boss;
+    this.spawnWaves(phase);
+    if (phase === 3) b.pend = 0.32;
+    b.state = 'land'; b.t = 0.9;
+    b.combo = phase === 2 ? (Math.random() < 0.4 ? 1 : 0) : phase === 3 ? 1 : 0;
+    this.shake = 1; this.ev('boom');
+    for (let i = 0; i < 10; i++) this.parts.push({ x: b.x + Math.random() * b.w, y: 10 * TILE - 4, vx: (Math.random() - 0.5) * 360, vy: -Math.random() * 160, life: 0.5, size: 5 + Math.random() * 4, color: 'dust', g: 60 });
+  }
+
+  hitBoss() {
+    const b = this.boss, p = this.p;
+    b.hp--; b.hurt = 1.5;
+    p.vy = p.jumpHeld ? -840 : -620; p.y = b.y - p.h; p.combo = 0;
+    this.score += 1000; this.addText(b.x + b.w / 2, b.y - 14, '+1000', '#ffd54a');
+    this.shake = 0.7;
+    for (let i = 0; i < 10; i++) this.parts.push({ x: b.x + b.w / 2, y: b.y + 20, vx: (Math.random() - 0.5) * 500, vy: -Math.random() * 420, life: 0.7, size: 5, color: 'star', g: 900 });
+    if (b.hp <= 0) {
+      b.state = 'dead'; b.t = 2.6; b.vy = -650; this.waves.length = 0; this.score += 5000;
+      this.addText(b.x + b.w / 2, b.y - 40, '+5000', '#fff');
+      for (let i = 0; i < 28; i++) this.parts.push({ x: b.x + b.w / 2, y: b.y + 40, vx: (Math.random() - 0.5) * 760, vy: -200 - Math.random() * 520, life: 1.3, size: 6, color: 'spark', g: 900 });
+      this.ev('bossdown');
+    } else {
+      b.state = 'stunned'; b.t = 1.1; b.vx = 0; b.combo = 0; b.pend = 0; this.ev('bosshit');
+    }
+  }
+
+  updateWaves(dt) {
+    for (let i = this.waves.length - 1; i >= 0; i--) {
+      const w = this.waves[i];
+      w.x += w.vx * dt;
+      if (w.x < -60 || w.x > this.cols * TILE + 60) this.waves.splice(i, 1);
+    }
   }
 
   bumpAt(c, r) {

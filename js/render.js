@@ -27,6 +27,15 @@ export const THEMES = {
     used: '#8d83a3', usedD: '#736a89', stone: '#7d86b5', stoneD: '#656e9c', stoneL: '#9ea7d0',
     leaf: '#58c8a0', leafD: '#3ea682', logC: '#8a6a8f', logD: '#6f5274', logL: '#a78aad', vig: 0.28,
   },
+  pond: {
+    night: true,
+    skyTop: '#0b2236', skyBot: '#2f8f94', sun: '#e9fbff', cloud: '#5fb3b8',
+    far: '#1f5f70', hill1: '#194c5e', hill2: '#133f50', treeA: '#1f6f6a', treeB: '#185a5c', trunk: '#25384a',
+    grass: '#55c29a', grassD: '#3aa07f', grassL: '#82dcb8', dirt: '#3f5a6b', dirtD: '#324b5b', dirtDot: '#2a4150',
+    brick: '#d97b8f', brickD: '#b45f73', brickL: '#f19db0', q: '#ffd55c', qD: '#e8ab26', qL: '#fff0a0',
+    used: '#8aa0ad', usedD: '#6f8693', stone: '#7e9bb8', stoneD: '#66829f', stoneL: '#a2bcd4',
+    leaf: '#6fe0b0', leafD: '#45b98a', logC: '#6f8a8f', logD: '#587277', logL: '#8fa9ad', vig: 0.3,
+  },
 };
 
 const FONT = '-apple-system, BlinkMacSystemFont, "SF Pro Rounded", "SF Pro Display", Inter, system-ui, sans-serif';
@@ -392,17 +401,170 @@ export function drawHero(ctx, p, t) {
   ctx.restore();
 }
 
+// ── night ghost: a pale wisp. Shy (faded, hands over its eyes) while the hero looks at it. ──
+function drawGhost(ctx, e, t, w) {
+  const cx = e.x + e.w / 2, cy = e.y + e.h / 2 + Math.sin(e.bob) * 4;
+  const p = w.p, face = (p.x + p.w / 2) > cx ? 1 : -1;
+  const shy = e.shy, a = e.state === 'dead' ? 0.5 : (shy ? 0.5 : 0.95);
+  ctx.save(); ctx.translate(cx, cy); ctx.globalAlpha = a;
+  // glow
+  const gl = ctx.createRadialGradient(0, 0, 4, 0, 0, 40);
+  gl.addColorStop(0, shy ? 'rgba(170,215,255,.25)' : 'rgba(170,215,255,.5)'); gl.addColorStop(1, 'rgba(170,215,255,0)');
+  ctx.fillStyle = gl; circle(ctx, 0, 0, 40); ctx.fill();
+  const wob = Math.sin(e.anim * 5) * 3;
+  // body: teardrop head with a wavy wisp tail
+  ctx.fillStyle = '#cfe6ff';
+  ctx.beginPath();
+  ctx.moveTo(-16, 2);
+  ctx.bezierCurveTo(-18, -22, 18, -22, 16, 2);
+  ctx.bezierCurveTo(16, 10, 18, 16 + wob * 0.3, 11, 19);
+  ctx.quadraticCurveTo(7, 12 + wob, 3, 19);
+  ctx.quadraticCurveTo(-1, 12 - wob, -5, 19);
+  ctx.quadraticCurveTo(-9, 12 + wob, -13, 18);
+  ctx.bezierCurveTo(-18, 14, -16, 8, -16, 2);
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#eaf4ff'; ell(ctx, -3, -7, 9, 7, -0.3); ctx.fill();
+  // curly wisp on top
+  ctx.strokeStyle = '#cfe6ff'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(0, -17); ctx.quadraticCurveTo(-2, -26, 5, -26 + wob * 0.3); ctx.quadraticCurveTo(9, -26, 8, -22); ctx.stroke();
+  // cheeks
+  ctx.fillStyle = 'rgba(255,160,190,.45)'; circle(ctx, -10 + face * 2, 2, 3); ctx.fill(); circle(ctx, 10 + face * 2, 2, 3); ctx.fill();
+  const ex = face * 2;
+  if (shy) {
+    // little hands over the eyes
+    ctx.fillStyle = '#b9d6f7'; circle(ctx, -6 + ex, -4, 6); ctx.fill(); circle(ctx, 6 + ex, -4, 6); ctx.fill();
+    ctx.strokeStyle = '#7ea6d6'; ctx.lineWidth = 1.4;
+    ctx.beginPath(); ctx.moveTo(-9 + ex, -4); ctx.lineTo(-3 + ex, -4); ctx.moveTo(3 + ex, -4); ctx.lineTo(9 + ex, -4); ctx.stroke();
+  } else {
+    // sleepy-wide eyes + small "o" mouth
+    ctx.fillStyle = '#243455';
+    ell(ctx, -6 + ex, -4, 3, 4.2); ctx.fill(); ell(ctx, 6 + ex, -4, 3, 4.2); ctx.fill();
+    ctx.fillStyle = '#fff'; circle(ctx, -5.2 + ex, -5.4, 1.1); ctx.fill(); circle(ctx, 6.8 + ex, -5.4, 1.1); ctx.fill();
+    ctx.fillStyle = '#243455'; ell(ctx, ex, 6, 2.4, 3); ctx.fill();
+  }
+  ctx.restore();
+}
+
+// ── Big Frog ──
+function drawBoss(ctx, b, w, t) {
+  const cx = b.x + b.w / 2, ground = 10 * TILE, by = b.y + b.h;
+  const dead = b.state === 'dead', air = b.state === 'air', stunned = b.state === 'stunned';
+  const p = w.p, flash = b.hurt > 0 && !stunned && Math.floor(t * 16) % 2 === 0, rage = b.hp === 1;
+  // shadow
+  if (!dead) {
+    const up = Math.max(0, ground - by), k = Math.max(0.45, 1 - up / 260);
+    ctx.fillStyle = 'rgba(5,20,30,.32)'; ell(ctx, cx, ground - 2, 62 * k, 8 * k); ctx.fill();
+  }
+  ctx.save();
+  if (dead) { ctx.translate(cx, b.y + b.h / 2); ctx.rotate(b.rot); ctx.translate(0, b.h / 2); } else ctx.translate(cx, by);
+  let sq = b.squash || 0;
+  if (b.state === 'land') sq = Math.max(sq, 0.2 * Math.max(0, Math.min(1, (b.t - 0.6) / 0.3)));
+  const st = air ? Math.max(-0.3, Math.min(1, -b.vy / 1000)) * 0.12 : 0;
+  ctx.scale(1 + sq * 0.6 - st * 0.6, 1 - sq + st);
+  const C = (n, f) => flash ? f : n;
+  const body = C('#3aa86e', '#f1fff6'), dark = C('#2a8a56', '#d8f5e4'), belly = C('#c9f0a8', '#ffffff');
+  // back legs
+  ctx.fillStyle = dark;
+  for (const sx of [-1, 1]) { ell(ctx, sx * 48, -17, 26, 17, sx * -0.25); ctx.fill(); ell(ctx, sx * 62, -5, 21, 7); ctx.fill(); }
+  // body
+  ctx.fillStyle = body; ell(ctx, 0, -46, 62, 44); ctx.fill();
+  ctx.fillStyle = dark; ctx.globalAlpha = 0.35;
+  ell(ctx, -26, -68, 9, 6, -0.3); ctx.fill(); ell(ctx, 22, -72, 7, 5, 0.3); ctx.fill(); ell(ctx, 4, -62, 5, 4); ctx.fill(); ell(ctx, -44, -48, 6, 4.5); ctx.fill();
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = belly; ell(ctx, 0, -32, 42, 28); ctx.fill();
+  if (b.state === 'crouch' || b.state === 'land') { const pf = 4 + Math.sin(t * 40) * 2; ctx.fillStyle = C('#e2f9c8', '#fff'); ell(ctx, 0, -30, 22 + pf, 13 + pf * 0.5); ctx.fill(); }
+  // front arms
+  ctx.fillStyle = body;
+  for (const sx of [-1, 1]) { ell(ctx, sx * 36, -13, 11, 15); ctx.fill(); ell(ctx, sx * 38, -3, 14, 5); ctx.fill(); }
+  // eye bumps
+  for (const sx of [-1, 1]) { ctx.fillStyle = body; circle(ctx, sx * 34, -84, 19); ctx.fill(); }
+  // eyes
+  const pcx = p.x + p.w / 2, pcy = p.y + p.h / 2;
+  const lx = Math.max(-1, Math.min(1, (pcx - cx) / 220)), ly = Math.max(-1, Math.min(1, (pcy - (b.y + 10)) / 200));
+  for (const sx of [-1, 1]) {
+    const ex = sx * 34, ey = -84;
+    ctx.fillStyle = rage && !flash ? '#fff0ee' : '#fff'; circle(ctx, ex, ey, 14); ctx.fill();
+    if (dead) {
+      ctx.strokeStyle = '#1d2b24'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(ex - 6, ey - 6); ctx.lineTo(ex + 6, ey + 6); ctx.moveTo(ex + 6, ey - 6); ctx.lineTo(ex - 6, ey + 6); ctx.stroke();
+    } else if (stunned) {
+      ctx.strokeStyle = '#1d2b24'; ctx.lineWidth = 2; ctx.beginPath();
+      for (let i = 0; i <= 26; i++) { const ang = i * 0.55 + t * 6 * sx, r = 1.2 + i * 0.22; const px = ex + Math.cos(ang) * r, py = ey + Math.sin(ang) * r; i ? ctx.lineTo(px, py) : ctx.moveTo(px, py); }
+      ctx.stroke();
+    } else {
+      ctx.fillStyle = '#1d2b24'; circle(ctx, ex + lx * 5, ey + ly * 4, 7); ctx.fill();
+      ctx.fillStyle = '#fff'; circle(ctx, ex + lx * 5 - 2, ey + ly * 4 - 2.5, 2.2); ctx.fill();
+      if (rage) { ctx.fillStyle = 'rgba(255,90,90,.22)'; circle(ctx, ex, ey, 14); ctx.fill(); }
+    }
+  }
+  // brows
+  if (!stunned && !dead) {
+    ctx.strokeStyle = '#1f6a45'; ctx.lineWidth = 4; ctx.lineCap = 'round';
+    const k = rage ? 9 : 5;
+    ctx.beginPath(); ctx.moveTo(-50, -100 + k * 0.2); ctx.lineTo(-20, -96 - 0 + k * 0.9 - 4); ctx.moveTo(50, -100 + k * 0.2); ctx.lineTo(20, -96 + k * 0.9 - 4); ctx.stroke();
+  }
+  // cheeks + mouth
+  ctx.fillStyle = 'rgba(255,130,150,.45)'; circle(ctx, -46, -58, 7); ctx.fill(); circle(ctx, 46, -58, 7); ctx.fill();
+  ctx.strokeStyle = '#1f6a45'; ctx.lineWidth = 3.5; ctx.lineCap = 'round';
+  const open = air || b.state === 'crouch' || dead;
+  if (open) {
+    ctx.fillStyle = '#25483a'; ctx.beginPath(); ctx.moveTo(-30, -56); ctx.quadraticCurveTo(0, -36, 30, -56); ctx.quadraticCurveTo(0, -62, -30, -56); ctx.fill();
+    ctx.fillStyle = '#ff8fa6'; ell(ctx, 0, -48, 12, 4.5); ctx.fill();
+  } else if (stunned) {
+    ctx.beginPath(); ctx.moveTo(-14, -52); for (let i = 0; i <= 6; i++) ctx.lineTo(-14 + i * 4.7, -52 + (i % 2 ? -3 : 3)); ctx.stroke();
+  } else {
+    ctx.beginPath(); ctx.moveTo(-32, -56); ctx.quadraticCurveTo(0, rage ? -48 : -40, 32, -56); ctx.stroke();
+  }
+  // lily-pad hat + flower
+  const hb = Math.sin(t * 2.2) * 1.2;
+  ctx.save(); ctx.translate(2, -101 + hb); ctx.rotate(-0.12);
+  ctx.fillStyle = '#4fd36b'; ell(ctx, 0, 0, 27, 8); ctx.fill();
+  ctx.fillStyle = '#8af19a'; ell(ctx, -4, -1.5, 18, 4.5); ctx.fill();
+  ctx.fillStyle = body; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(22, -6); ctx.lineTo(24, 2); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#ff8fb1'; for (let i = 0; i < 5; i++) { ctx.save(); ctx.translate(-6, -8); ctx.rotate(i * 1.2566); ell(ctx, 0, -4.5, 3, 5); ctx.fill(); ctx.restore(); }
+  ctx.fillStyle = '#ffe27a'; circle(ctx, -6, -8, 2.6); ctx.fill();
+  ctx.restore();
+  // dizzy stars
+  if (stunned) {
+    for (let i = 0; i < 3; i++) {
+      const ang = t * 4 + i * 2.094;
+      ctx.fillStyle = '#ffe27a'; circle(ctx, Math.cos(ang) * 46, -122 + Math.sin(ang) * 9, 4); ctx.fill();
+    }
+  }
+  ctx.restore();
+}
+
+function drawWave(ctx, wv, t) {
+  const d = Math.sign(wv.vx) || 1, x = wv.x + wv.w / 2, y = wv.y + wv.h;
+  ctx.save(); ctx.translate(x, y); ctx.scale(d, 1);
+  ctx.fillStyle = '#58d6d0';
+  ctx.beginPath(); ctx.moveTo(-15, 0); ctx.quadraticCurveTo(-14, -10, -2, -16); ctx.quadraticCurveTo(10, -26, 17, -22); ctx.quadraticCurveTo(10, -18, 14, -9); ctx.quadraticCurveTo(15, -3, 15, 0); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#bff7f1'; ctx.beginPath(); ctx.moveTo(-8, -2); ctx.quadraticCurveTo(-6, -10, 3, -14); ctx.quadraticCurveTo(0, -8, 2, -2); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#ffffff'; circle(ctx, 18 + Math.sin(t * 20) * 1.5, -24, 2.2); ctx.fill(); circle(ctx, 8, -27, 1.6); ctx.fill();
+  ctx.restore();
+}
+
+function drawReeds(ctx, x, t) {
+  ctx.strokeStyle = '#1b5a58'; ctx.lineWidth = 4; ctx.lineCap = 'round';
+  for (let i = 0; i < 4; i++) {
+    const h = 70 + hash(x + i) * 60, sw = Math.sin(t * 1.4 + i + x) * 4, bx = x + i * 10 - 15;
+    ctx.beginPath(); ctx.moveTo(bx, 10 * TILE); ctx.quadraticCurveTo(bx + sw * 0.5, 10 * TILE - h * 0.5, bx + sw, 10 * TILE - h); ctx.stroke();
+    if (i % 2 === 0) { ctx.fillStyle = '#6b4a3a'; rr(ctx, bx + sw - 3.5, 10 * TILE - h - 16, 7, 18, 3.5); ctx.fill(); }
+  }
+}
+
 // ───────────────────────── scene ─────────────────────────
 export function drawWorld(ctx, w, t, opts = {}) {
   const th = THEMES[w.level.theme];
   drawBackground(ctx, th, w.cam, t);
   ctx.save();
-  ctx.translate(-Math.round(w.cam), 0);
+  const sh = (w.shake || 0) ** 2;
+  ctx.translate(-Math.round(w.cam) + Math.sin(t * 93) * sh * 8, Math.cos(t * 77) * sh * 6);
   const c0 = Math.max(0, Math.floor(w.cam / TILE) - 1), c1 = Math.min(w.cols - 1, Math.floor((w.cam + VW) / TILE) + 1);
   const vis = o => o.x + (o.w || 0) > w.cam - 80 && o.x < w.cam + VW + 80;
 
-  drawDoor(ctx, th, w);
-  drawPole(ctx, th, w, t);
+  if (w.level.arena) { drawReeds(ctx, 40, t); drawReeds(ctx, w.cols * TILE - 70, t); }
+  else { drawDoor(ctx, th, w); drawPole(ctx, th, w, t); }
   for (const post of w.posts) if (vis(post)) drawPost(ctx, post, t);
 
   for (const it of w.items) if (vis(it)) drawAcorn(ctx, it, t);
@@ -414,10 +576,13 @@ export function drawWorld(ctx, w, t, opts = {}) {
   for (const e of w.enemies) {
     if (!vis(e)) continue;
     if (e.type === 'beetle') drawBeetle(ctx, e, th, t);
+    else if (e.type === 'ghost') drawGhost(ctx, e, t, w);
     else if (e.type === 'burr') drawBurr(ctx, e, t);
     else drawHopper(ctx, e, t);
   }
 
+  if (w.boss) drawBoss(ctx, w.boss, w, t);
+  for (const wv of w.waves) drawWave(ctx, wv, t);
   if (w.p.visible && !opts.hideHero) drawHero(ctx, w.p, t);
 
   for (const q of w.parts) {

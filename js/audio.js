@@ -60,6 +60,11 @@ const SFX = {
   flag: () => arp([60, 64, 67, 72, 76, 79, 84], 0.09),
   complete: () => { const t = ctx.currentTime; [[72, 0], [72, 0.14], [72, 0.28], [76, 0.5], [79, 0.7], [84, 0.9]].forEach(([m, d]) => tone(mtof(m), t + d, 0.4, 'triangle', 0.15)); },
   over: () => { const t = ctx.currentTime; [67, 64, 60, 55].forEach((m, i) => tone(mtof(m), t + i * 0.28, 0.5, 'triangle', 0.14)); },
+  croak: () => { const t = ctx.currentTime; tone(110, t, 0.12, 'sawtooth', 0.1, 70); tone(150, t + 0.14, 0.14, 'sawtooth', 0.1, 90); },
+  bossjump: () => { const t = ctx.currentTime; tone(180, t, 0.3, 'triangle', 0.16, 520); noise(t, 0.12, 0.07, 700); },
+  boom: () => { const t = ctx.currentTime; tone(110, t, 0.35, 'sine', 0.3, 38); noise(t, 0.3, 0.2, 400); },
+  bosshit: () => { const t = ctx.currentTime; tone(420, t, 0.28, 'square', 0.08, 120); tone(260, t + 0.05, 0.3, 'triangle', 0.14, 80); noise(t, 0.12, 0.12, 1100); },
+  bossdown: () => { const t = ctx.currentTime; tone(300, t, 0.9, 'sawtooth', 0.1, 50); noise(t, 0.6, 0.18, 600); [72, 76, 79, 84].forEach((m, i) => tone(mtof(m), t + 0.9 + i * 0.12, 0.4, 'triangle', 0.14)); },
   click: () => { const t = ctx.currentTime; tone(660, t, 0.06, 'sine', 0.09); },
 };
 export function sfx(name, arg) { if (!ctx || muted) return; try { SFX[name] && SFX[name](arg); } catch (e) {} }
@@ -80,6 +85,11 @@ const SONGS = {
     bpm: 84,
     mel: [76, 0, 0, 72, 0, 0, 69, 0, 71, 0, 0, 67, 0, 0, 64, 0, 69, 0, 0, 72, 0, 0, 76, 0, 74, 0, 0, 71, 0, 0, 0, 0],
     bass: [45, 0, 0, 0, 0, 0, 0, 0, 43, 0, 0, 0, 0, 0, 0, 0, 41, 0, 0, 0, 0, 0, 0, 0, 40, 0, 0, 0, 0, 0, 0, 0],
+  },
+  pond: {
+    bpm: 132,
+    mel: [69, 0, 69, 72, 0, 69, 0, 67, 65, 0, 65, 69, 0, 65, 0, 64, 62, 0, 62, 65, 0, 62, 0, 64, 67, 0, 69, 0, 71, 0, 72, 0],
+    bass: [45, 0, 45, 0, 45, 0, 45, 0, 41, 0, 41, 0, 41, 0, 41, 0, 38, 0, 38, 0, 38, 0, 38, 0, 40, 0, 40, 0, 43, 0, 43, 0],
   },
 };
 let song = null, step = 0, nextT = 0;

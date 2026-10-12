@@ -7,12 +7,13 @@ export const ROWS = 12;
 export const T = { AIR: 0, GROUND: 1, BRICK: 3, Q: 4, USED: 5, STONE: 6, LEAF: 7, LOG: 8 };
 
 function make(def) {
-  const cols = def.flag + 9;
+  const cols = def.arena ? 22 : def.flag + 9;
   const tiles = Array.from({ length: ROWS }, () => new Uint8Array(cols));
   const L = {
     id: def.id, name: def.name, world: def.world, theme: def.theme, time: def.time,
+    sub: def.sub || '', arena: !!def.arena, bossC: def.bossC || 0,
     cols, tiles, contents: {}, enemies: [], coins: [], checkpoints: [],
-    flag: def.flag, spawn: { c: 3, r: 9 },
+    flag: def.flag, spawn: { c: def.spawnC || 3, r: 9 },
   };
   const set = (c, r, t) => { if (c >= 0 && c < cols && r >= 0 && r < ROWS) tiles[r][c] = t; };
   const b = {
@@ -144,7 +145,20 @@ const grove = make({
     b.q(130, 6, 'coin'); b.brick(131, 6); b.q(132, 6, 'coin');
     b.plat(138, 7, 3); b.coinRow(138, 6, 3);
     b.stack(148, 1); b.stack(149, 2); b.stack(150, 3); b.stack(151, 4);
+    // night ghosts: they freeze while you look at them, and creep up when you look away
+    b.enemy('ghost', 46, 6); b.enemy('ghost', 66, 7); b.enemy('ghost', 90, 6); b.enemy('ghost', 106, 7);
+    b.enemy('ghost', 115, 6); b.enemy('ghost', 134, 7); b.enemy('ghost', 145, 6);
   },
 });
 
-export const LEVELS = [meadow, canopy, grove];
+// ───────────────────────── 4 · Boss Arena (one screen, Big Frog) ─────────────────────────
+const arena = make({
+  id: 3, world: 4, name: 'Boss Arena', sub: 'Big Frog is waiting in the pond…', theme: 'pond', time: 180, arena: true, bossC: 15, spawnC: 6, flag: 0,
+  build(b) {
+    b.ground(0, 21);
+    b.q(9, 6, 'coin'); b.q(10, 6, 'acorn'); b.q(11, 6, 'coin');
+    b.coinRow(3, 8, 3);
+  },
+});
+
+export const LEVELS = [meadow, canopy, grove, arena];

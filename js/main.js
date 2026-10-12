@@ -9,8 +9,9 @@ const STEP = 1 / 60;
 
 // ───────────── save ─────────────
 const SAVE_KEY = 'fd.save.v1';
-let save = { done: [false, false, false], best: [0, 0, 0] };
+let save = { done: LEVELS.map(() => false), best: LEVELS.map(() => 0) };
 try { const s = JSON.parse(localStorage.getItem(SAVE_KEY)); if (s && Array.isArray(s.done)) save = { ...save, ...s }; } catch (e) {}
+save.done = LEVELS.map((_, i) => !!save.done[i]); save.best = LEVELS.map((_, i) => +(save.best && save.best[i]) || 0);
 const persist = () => { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) {} };
 const unlocked = i => i === 0 || save.done[i - 1];
 
@@ -37,6 +38,10 @@ let mode = 'menu';           // menu | ready | play | pause | done | over
 let world = null, bgWorld = null, run = null;
 let clock = 0, acc = 0, readyUntil = 0, menuIdx = 0;
 const hudCache = {};
+let bossHp = 3;
+function setBossPips(hp) {
+  [...$('bossBar').querySelectorAll('i')].forEach((el, i) => el.classList.toggle('off', i >= hp));
+}
 let wasHurt = 0;
 
 const show = id => { for (const s of document.querySelectorAll('.screen')) s.classList.toggle('show', s.id === id); };
@@ -46,8 +51,8 @@ const pad = (n, l) => String(Math.max(0, n)).padStart(l, '0');
 const fmt = n => n.toLocaleString('en-US');
 
 // ───────────── title ─────────────
-const THUMB = [['#7fd16a', '#5fba7d'], ['#a5d05a', '#d29a6c'], ['#58b894', '#2c6b7a']];
-const THUMB_SKY = ['linear-gradient(#79cbfb,#eaf8ff)', 'linear-gradient(#ffae82,#fff0d3)', 'linear-gradient(#161a44,#6a5aa8)'];
+const THUMB = [['#7fd16a', '#5fba7d'], ['#a5d05a', '#d29a6c'], ['#58b894', '#2c6b7a'], ['#55c29a', '#3f9a8a']];
+const THUMB_SKY = ['linear-gradient(#79cbfb,#eaf8ff)', 'linear-gradient(#ffae82,#fff0d3)', 'linear-gradient(#161a44,#6a5aa8)', 'linear-gradient(#0b2236,#2f8f94)'];
 
 function buildLevels() {
   const list = $('levelList');
@@ -87,7 +92,9 @@ function loadLevel() {
   world = new World(L, { coins: run.coins, score: run.score, checkpointC: run.checkpointC });
   mode = 'ready'; input.active = false; releaseAll(); acc = 0;
   $('rWorld').textContent = 'World ' + L.world; $('rName').textContent = L.name; $('rLives').textContent = '× ' + run.lives;
+  $('rSub').textContent = L.sub; $('rSub').hidden = !L.sub;
   $('hWorld').textContent = L.world; $('hName').textContent = L.name;
+  $('bossBar').hidden = !L.arena; bossHp = 3; setBossPips(3);
   $('hud').hidden = false; $('touch').hidden = !isTouch;
   show('scReady'); readyUntil = clock + 1.5;
   A.stopMusic();
@@ -115,7 +122,7 @@ function finishLevel(ev) {
   run.coins = world.coins; run.score = world.score; run.checkpointC = null;
   const L = LEVELS[i], last = i === LEVELS.length - 1;
   $('dKick').textContent = `World ${L.world} · ${L.name}`;
-  $('dTitle').textContent = last ? 'You found every burrow!' : 'Level complete!';
+  $('dTitle').textContent = L.arena ? 'Big Frog defeated!' : last ? 'You found every burrow!' : 'Level complete!';
   $('dCoins').textContent = fmt(world.coins);
   $('dTime').textContent = `${ev.timeLeft} × 10 = ${fmt(ev.bonus)}`;
   $('dScore').textContent = fmt(levelScore);
@@ -196,6 +203,10 @@ function updateHud() {
   setText('hCoins', pad(world.coins, 2)); setText('hScore', pad(world.score, 6));
   const t = Math.ceil(world.time); setText('hTime', pad(t, 3)); $('hTimeP').classList.toggle('warn', t <= 30 && world.p.state === 'play');
   setText('hLives', String(run.lives));
+  if (world.boss && world.boss.hp !== bossHp) {
+    bossHp = world.boss.hp; setBossPips(bossHp);
+    const bb = $('bossBar'); bb.classList.remove('hit'); void bb.offsetWidth; bb.classList.add('hit');
+  }
 }
 
 // ───────────── main loop ─────────────
