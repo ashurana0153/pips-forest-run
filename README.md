@@ -11,6 +11,8 @@ flat-vector art, no build step, no dependencies.
 **Controls:** ← → / A D move · Space / ↑ / W / Z jump (hold for a higher jump) · Shift / X run · P pause · M mute.
 On phones turn the device sideways: on-screen d-pad, Run and Jump buttons appear.
 
+**3D version:** a first small 3D level lives in [`3d/`](3d/README.md).
+
 ## Run it
 Any static server works (ES modules need http, not file://):
 
