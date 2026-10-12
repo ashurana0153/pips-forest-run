@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Pip's Forest Run</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+  <div id="stage" class="stage">
+    <canvas id="cv"></canvas>
+
+    <div id="hud" class="hud" hidden>
+      <div class="hud-l">
+        <div class="pill"><svg class="ic" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="9" fill="#e0a21c"/><circle cx="10" cy="10" r="7.2" fill="#ffd54a"/><circle cx="10" cy="10" r="4.2" fill="#ffe98d"/></svg><b id="hCoins">00</b></div>
+        <div class="pill"><span class="lbl">Score</span><b id="hScore">000000</b></div>
+      </div>
+      <div class="pill world"><span class="wn" id="hWorld">1</span><span id="hName">Sunny Meadow</span></div>
+      <div class="hud-r">
+        <div class="pill" id="hTimeP"><span class="lbl">Time</span><b id="hTime">240</b></div>
+        <div class="pill"><svg class="ic" viewBox="0 0 20 20" aria-hidden="true"><path d="M10 17.5C4 13 2 10 2 7.2 2 4.9 3.8 3.2 6 3.2c1.7 0 3.1.9 4 2.3.9-1.4 2.3-2.3 4-2.3 2.2 0 4 1.7 4 4 0 2.800-2 5.800-8 10.300z" fill="#ff6b6b"/></svg><b id="hLives">3</b></div>
+        <button id="pauseBtn" class="circ" type="button" aria-label="Pause"><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="5" y="4" width="3.4" height="12" rx="1.4" fill="currentColor"/><rect x="11.600" y="4" width="3.4" height="12" rx="1.4" fill="currentColor"/></svg></button>
+      </div>
+    </div>
+
+    <div id="touch" class="touch" hidden>
+      <div class="dpad" data-dpad data-dir=""><span class="arr l"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="arr r"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div>
+      <div class="abtns"><button class="tbtn run" type="button" data-act="run">Run</button><button class="tbtn jump" type="button" data-act="jump">Jump</button></div>
+    </div>
+
+    <!-- title -->
+    <section id="scTitle" class="screen show">
+      <div class="title-wrap">
+        <div class="brand glass">
+          <canvas id="heroCv" width="260" height="230" aria-hidden="true"></canvas>
+          <h1>Pip’s<br>Forest Run</h1>
+          <p>Run, jump and bounce on beetles. Find the burrow at the end of every level.</p>
+          <button id="playBtn" class="btn primary" type="button">Play</button>
+          <div class="keys" id="keysHint"><span><kbd>←</kbd><kbd>→</kbd> move</span><span><kbd>Space</kbd> jump</span><span><kbd>Shift</kbd> run</span><span><kbd>P</kbd> pause</span></div>
+        </div>
+        <div class="levels" id="levelList" role="list" aria-label="Levels"></div>
+      </div>
+      <div class="corner">
+        <button id="fsBtn" class="circ glass" type="button" aria-label="Full screen"><svg viewBox="0 0 20 20"><path d="M4 8V4h4M16 8V4h-4M4 12v4h4M16 12v4h-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+        <button id="muteBtn" class="circ glass" type="button" aria-label="Sound"></button>
+      </div>
+    </section>
+
+    <section id="scReady" class="screen">
+      <div class="card glass ready"><span class="kicker" id="rWorld">World 1</span><h2 id="rName">Sunny Meadow</h2><div class="lives"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 17.5C4 13 2 10 2 7.2 2 4.9 3.8 3.2 6 3.2c1.7 0 3.1.9 4 2.3.9-1.4 2.3-2.3 4-2.3 2.2 0 4 1.7 4 4 0 2.800-2 5.800-8 10.300z" fill="#ff6b6b"/></svg><b id="rLives">× 3</b></div></div>
+    </section>
+
+    <section id="scPause" class="screen">
+      <div class="card glass">
+        <h2>Paused</h2>
+        <div class="stack">
+          <button id="resumeBtn" class="btn primary" type="button">Resume</button>
+          <button id="restartBtn" class="btn" type="button">Restart level</button>
+          <button id="soundBtn2" class="btn" type="button">Sound: on</button>
+          <button id="quitBtn" class="btn ghost" type="button">Quit to menu</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="scDone" class="screen">
+      <div class="card glass done">
+        <span class="kicker" id="dKick">World 1 · Sunny Meadow</span>
+        <h2 id="dTitle">Level complete!</h2>
+        <dl class="stats">
+          <div><dt>Coins</dt><dd id="dCoins">0</dd></div>
+          <div><dt>Time bonus</dt><dd id="dTime">0</dd></div>
+          <div class="big"><dt>Level score</dt><dd id="dScore">0</dd></div>
+          <div><dt>Best</dt><dd id="dBest">0</dd></div>
+        </dl>
+        <div class="row">
+          <button id="nextBtn" class="btn primary" type="button">Next level</button>
+          <button id="replayBtn" class="btn" type="button">Replay</button>
+          <button id="menuBtn1" class="btn ghost" type="button">Menu</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="scOver" class="screen">
+      <div class="card glass">
+        <h2>Out of lives</h2>
+        <p class="sub" id="oText">Pip needs a nap. Try again?</p>
+        <div class="row">
+          <button id="retryBtn" class="btn primary" type="button">Try again</button>
+          <button id="menuBtn2" class="btn ghost" type="button">Menu</button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div id="rotate" class="rotate"><div><svg viewBox="0 0 48 48" width="48" height="48"><rect x="14" y="6" width="20" height="36" rx="4" fill="none" stroke="currentColor" stroke-width="3"/><path d="M38 18a14 14 0 0 1 0 16M38 34l-1.500-5M38 34l5-2" fill="none" stroke="currentColor" stroke-width="2.600" stroke-linecap="round"/></svg><p>Turn your phone sideways to play</p></div></div>
+</div>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
